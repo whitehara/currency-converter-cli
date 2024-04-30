@@ -114,7 +114,7 @@ kub : Bitkub Coin
 ### Show help
 You can use `-h` option for printing the help.
 ```
-$ 
+$ ./currency-converter-cli -h
 Usage:
         ./currency-converter-cli [-v] [-l] [-outcsv] [-date=YYYY-MM-DD] <NUM> FROM TO [TO...]
 -v      Show version
