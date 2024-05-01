@@ -3,12 +3,14 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dustin/go-humanize"
 )
@@ -45,8 +47,12 @@ func main() {
 		os.Exit(0)
 	}
 
-	cc := &CurrencyConvert{}
-	cc.date = *datetPtr
+	// check date
+	if err := checkDate(*datetPtr); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	cc := &CurrencyConvert{date: *datetPtr}
 	// Show currency list
 	if *listPtr {
 		cc.PrintCurrencyList()
@@ -135,6 +141,22 @@ func main() {
 	}
 
 }
+
+// check date format
+func checkDate(arg string) error {
+	var layout string = "2006-01-02"
+
+	// "latest" is also allowed
+	if arg == "latest" {
+		return nil
+	}
+	if _, err := time.Parse(layout, arg); err != nil {
+		return err
+	}
+	return nil
+}
+
+// print CSV header
 func printCsvHeader() {
 	// print header
 	fmt.Printf("\"%s\",\"%s\",\"%s\",\"%s\"\n", "FROM AMOUNT", "FROM CURRENCY", "TO AMOUNT", "TO CURRENCY")
@@ -201,9 +223,18 @@ type CurrencyConvert struct {
 }
 
 // get currency convert rate list
-func (cc *CurrencyConvert) getFromCurrency(arg string) map[string]interface{} {
-	var mainUrl string = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@" + cc.date + "/v1/currencies/"
-	var subUrl string = "https://currency-api.pages.dev/npm/@fawazahmed0/currency-api@" + cc.date + "/v1/currencies/"
+func (cc *CurrencyConvert) getFromCurrency(arg string) (map[string]interface{}, error) {
+	var date string
+
+	// set "latest", if cc.date is empty
+	if cc.date == "" {
+		date = "latest"
+	} else {
+		date = cc.date
+	}
+
+	var mainUrl string = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@" + date + "/v1/currencies/"
+	var subUrl string = "https://currency-api.pages.dev/npm/@fawazahmed0/currency-api@" + date + "/v1/currencies/"
 	var response *http.Response
 	var err error
 
@@ -216,58 +247,75 @@ func (cc *CurrencyConvert) getFromCurrency(arg string) map[string]interface{} {
 	if err != nil {
 		response, err = http.Get(surl)
 		if err != nil {
-			fmt.Println(err)
+			return nil, err
 		}
 	}
 	err = json.NewDecoder(response.Body).Decode(&cc.fromCurrency)
 	if err != nil {
-		fmt.Println(err)
+		return nil, err
 	}
-	return cc.fromCurrency
+	return cc.fromCurrency, nil
 }
 
 // get supported currencies
-func (cc *CurrencyConvert) getCurrencyList() map[string]interface{} {
-	var url string = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@" + cc.date + "/v1/currencies.min.json"
-	var surl string = "https://currency-api.pages.dev/npm/@fawazahmed0/currency-api@" + cc.date + "/v1/currencies.min.json"
+func (cc *CurrencyConvert) getCurrencyList() (map[string]interface{}, error) {
+	var date string
+
+	// set "latest", if cc.date is empty
+	if cc.date == "" {
+		date = "latest"
+	} else {
+		date = cc.date
+	}
+
+	var url string = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@" + date + "/v1/currencies.min.json"
+	var surl string = "https://currency-api.pages.dev/npm/@fawazahmed0/currency-api@" + date + "/v1/currencies.min.json"
 	var response *http.Response
 	var err error
+
 	// get the response from the link
 	response, err = http.Get(url)
 	if err != nil {
 		response, err = http.Get(surl)
 		if err != nil {
-			fmt.Println(err)
+			return nil, err
 		}
 	}
+
 	// get the the currency list
 	err = json.NewDecoder(response.Body).Decode(&cc.currencyList)
 	if err != nil {
-		fmt.Println(err)
+		return nil, err
 	}
-	return cc.currencyList
+	return cc.currencyList, nil
 }
 
 // print "from" currency rate date
-func (cc *CurrencyConvert) PrintCurrencyList() bool {
+func (cc *CurrencyConvert) PrintCurrencyList() {
 	if len(cc.currencyList) == 0 {
-		cc.getCurrencyList()
+		_, err := cc.getCurrencyList()
+		if err != nil {
+			fmt.Println(err)
+		}
 	}
 	for name, desc := range cc.currencyList {
 		fmt.Println(name, ":", desc)
 	}
-	return true
 }
 
 // print "from" currency rate date
 func (cc *CurrencyConvert) PrintRateDate(from string) bool {
-	// check from and to are currencies
+	// check "from" is currency
 	if !cc.CheckIsCurrency(from) {
 		return false
 	}
 
 	if len(cc.fromCurrency) == 0 {
-		cc.getFromCurrency(from)
+		_, err := cc.getFromCurrency(from)
+		if err != nil {
+			fmt.Println(err)
+			return false
+		}
 	}
 	rdate := cc.fromCurrency["date"]
 	fmt.Println("Rate on", rdate)
@@ -275,32 +323,39 @@ func (cc *CurrencyConvert) PrintRateDate(from string) bool {
 }
 
 // convert currency from "from" to "to"
-func (cc *CurrencyConvert) ConvertCurrency(amount float64, from string, to string) float64 {
+func (cc *CurrencyConvert) ConvertCurrency(amount float64, from string, to string) (float64, error) {
 	lfrom := strings.ToLower(from)
 	lto := strings.ToLower(to)
 
 	// check from and to are currencies
 	if !cc.CheckIsCurrency(from) || !cc.CheckIsCurrency(to) {
-		return 0
+		return 0, errors.New("Invalid currency name")
 	}
 
 	if len(cc.fromCurrency) == 0 {
-		cc.getFromCurrency(from)
+		_, err := cc.getFromCurrency(from)
+		if err != nil {
+			return 0, err
+		}
 	}
 	rtmp := cc.fromCurrency[lfrom].(map[string]interface{})
 	rate, err := strconv.ParseFloat(fmt.Sprintf("%v", rtmp[lto]), 64)
 	if err != nil {
-		fmt.Println(err)
+		return 0, err
 	}
-	return rate * amount
+	return rate * amount, nil
 }
 
 func (cc *CurrencyConvert) PrintConvert(amount float64, from string, arguments []string) {
 	// print converted results
 	var i int
 	for i = 0; i < len(arguments); i++ {
-		result := cc.ConvertCurrency(amount, from, strings.ToUpper(arguments[i]))
-		fmt.Println(humanize.Commaf(amount), from, "=", humanize.Commaf(result), strings.ToUpper(arguments[i]))
+		result, err := cc.ConvertCurrency(amount, from, strings.ToUpper(arguments[i]))
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Println(humanize.Commaf(amount), from, "=", humanize.Commaf(result), strings.ToUpper(arguments[i]))
+		}
 	}
 
 }
@@ -310,8 +365,12 @@ func (cc *CurrencyConvert) PrintCsvConvert(amount float64, from string, argument
 	// print converted results
 	var i int
 	for i = 0; i < len(arguments); i++ {
-		result := cc.ConvertCurrency(amount, from, strings.ToUpper(arguments[i]))
-		fmt.Printf("\"%s\",\"%s\",\"%s\",\"%s\"\n", humanize.Commaf(amount), from, humanize.Commaf(result), strings.ToUpper(arguments[i]))
+		result, err := cc.ConvertCurrency(amount, from, strings.ToUpper(arguments[i]))
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Printf("\"%s\",\"%s\",\"%s\",\"%s\"\n", humanize.Commaf(amount), from, humanize.Commaf(result), strings.ToUpper(arguments[i]))
+		}
 	}
 }
 
@@ -319,12 +378,15 @@ func (cc *CurrencyConvert) PrintCsvConvert(amount float64, from string, argument
 func (cc *CurrencyConvert) CheckIsCurrency(arg string) bool {
 	larg := strings.ToLower(arg)
 
+	// if the currency list is empty, get it
 	if len(cc.currencyList) == 0 {
-		//fmt.Println("Currency list is empty. Get list.")
-		cc.getCurrencyList()
+		_, err := cc.getCurrencyList()
+		if err != nil {
+			fmt.Println(err)
+			return false
+		}
 	}
 	currency := cc.currencyList[larg]
-	//fmt.Println(arg, ":", currency)
 	if currency == nil {
 		fmt.Println(arg, "is not a currency")
 	}

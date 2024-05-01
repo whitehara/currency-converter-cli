@@ -7,6 +7,7 @@ This tool uses [fawazahmed0/exchange-api](https://github.com/fawazahmed0/exchang
 ```
 $ git clone https://github.com/whitehara/currency-converter-cli
 $ cd currency-converter-cli
+$ go test (optional)
 $ go build
 ```
 Then, you will see `./currency-converter-cli` is built.
