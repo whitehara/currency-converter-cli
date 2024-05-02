@@ -234,7 +234,7 @@ func (cc *CurrencyConvert) getFromCurrency(arg string) (map[string]interface{}, 
 	}
 
 	var mainUrl string = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@" + date + "/v1/currencies/"
-	var subUrl string = "https://currency-api.pages.dev/npm/@fawazahmed0/currency-api@" + date + "/v1/currencies/"
+	var subUrl string = "https://" + date + ".currency-api.pages.dev/v1/currencies/"
 	var response *http.Response
 	var err error
 
@@ -269,7 +269,7 @@ func (cc *CurrencyConvert) getCurrencyList() (map[string]interface{}, error) {
 	}
 
 	var url string = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@" + date + "/v1/currencies.min.json"
-	var surl string = "https://currency-api.pages.dev/npm/@fawazahmed0/currency-api@" + date + "/v1/currencies.min.json"
+	var surl string = "https://" + date + ".currency-api.pages.dev/v1/currencies.min.json"
 	var response *http.Response
 	var err error
 
